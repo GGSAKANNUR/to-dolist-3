@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Timed Reminders</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #eef2f3; display: flex; justify-content: center; padding: 20px; }
+        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        h2 { text-align: center; color: #333; }
+        .input-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
+        button { padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .primary-btn { background-color: #007bff; color: white; }
+        
+        #app-section, #reg-form { display: none; }
+        ul { list-style: none; padding: 0; margin-top: 20px; }
+        li { background: #f9f9f9; border: 1px solid #eee; padding: 15px; margin-bottom: 10px; border-left: 5px solid #007bff; border-radius: 4px; }
+        .item-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .controls { display: flex; gap: 8px; margin-top: 10px; }
+        
+        .done-btn { background-color: #28a745; color: white; flex: 1; }
+        .delete-btn { background-color: #dc3545; color: white; flex: 1; }
+        .locked { border-left-color: #6c757d; background-color: #f1f1f1; color: #888; }
+        .countdown { font-size: 11px; color: #d9534f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<!-- AUTH SECTION -->
+<div class="container" id="auth-section">
+    <div id="login-form">
+        <h2>🔐 Login</h2>
+        <div class="input-group">
+            <input type="text" id="loginUser" placeholder="Username">
+            <input type="password" id="loginPass" placeholder="Password">
+            <button class="primary-btn" onclick="login()">Sign In</button>
+        </div>
+        <button style="background:none;color:#007bff;text-decoration:underline" onclick="toggleAuth(true)">Register</button>
+    </div>
+    <div id="reg-form">
+        <h2>📝 Register</h2>
+        <div class="input-group">
+            <input type="text" id="regUser" placeholder="Username">
+            <input type="password" id="regPass" placeholder="Password">
+            <button class="primary-btn" onclick="register()">Create Account</button>
+        </div>
+        <button style="background:none;color:#007bff;text-decoration:underline" onclick="toggleAuth(false)">Back to Login</button>
+    </div>
+</div>
+
+<!-- APP SECTION -->
+<div class="container" id="app-section">
+    <h2 id="welcomeMsg">🔔 Reminders</h2>
+    <div class="input-group">
+        <input type="text" id="taskInput" placeholder="Task...">
+        <input type="date" id="dateInput">
+        <button class="primary-btn" onclick="addReminder()">Set Reminder</button>
+    </div>
+    <ul id="reminderList"></ul>
+    <button onclick="location.reload()" style="width:100%; margin-top:20px; background:#666; color:white;">Logout</button>
+</div>
+
+<script>
+    let currentUser = null;
+    const toggleAuth = (isReg) => {
+        document.getElementById('login-form').style.display = isReg ? 'none' : 'block';
+        document.getElementById('reg-form').style.display = isReg ? 'block' : 'none';
+    };
+
+    function register() {
+        const u = document.getElementById('regUser').value;
+        const p = document.getElementById('regPass').value;
+        if(u && p) { localStorage.setItem(`u_${u}`, p); alert("Registration Complete!"); toggleAuth(false); }
+    }
+
+    function login() {
+        const u = document.getElementById('loginUser').value;
+        const p = document.getElementById('loginPass').value;
+        if(localStorage.getItem(`u_${u}`) === p) { currentUser = u; startApp(); }
+        else alert("Wrong credentials");
+    }
+
+    function startApp() {
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('app-section').style.display = 'block';
+        document.getElementById('welcomeMsg').innerText = `🔔 ${currentUser}'s List`;
+        loadItems();
+    }
+
+    function addReminder() {
+        const task = document.getElementById('taskInput').value;
+        const date = document.getElementById('dateInput').value;
+        if(!task || !date) return;
+        const data = JSON.parse(localStorage.getItem(`data_${currentUser}`) || "[]");
+        data.push({ task, date, doneDate: null });
+        localStorage.setItem(`data_${currentUser}`, JSON.stringify(data));
+        loadItems();
+    }
+
+    function loadItems() {
+        const list = document.getElementById('reminderList');
+        list.innerHTML = '';
+        const data = JSON.parse(localStorage.getItem(`data_${currentUser}`) || "[]");
+        const now = new Date().getTime();
+
+        data.forEach((item, i) => {
+            const li = document.createElement('li');
+            let statusHtml = "";
+            let buttonHtml = "";
+            let diffDays = 0;
+
+            if (item.doneDate) {
+                li.className = 'locked';
+                const waitPeriod = 30 * 24 * 60 * 60 * 1000; 
+                const timePassed = now - item.doneDate;
+                diffDays = Math.ceil((waitPeriod - timePassed) / (1000 * 60 * 60 * 24));
+                
+                statusHtml = diffDays > 0 ? `<span class="countdown">Delete in ${diffDays}d</span>` : `<span class="countdown" style="color:green">Ready</span>`;
+                // Show ONLY Delete button if Done is clicked
+                buttonHtml = `<button class="delete-btn" onclick="deleteItem(${i}, ${diffDays})">Delete</button>`;
+            } else {
+                // Show ONLY Done button if not finished
+                buttonHtml = `<button class="done-btn" onclick="markDone(${i})">Done</button>`;
+            }
+
+            li.innerHTML = `
+                <div class="item-header">
+                    <div><strong>${item.task}</strong><br><small>Due: ${item.date}</small></div>
+                    ${statusHtml}
+                </div>
+                <div class="controls">
+                    ${buttonHtml}
+                </div>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    function markDone(i) {
+        if(confirm("Complete and Lock? Deletable in 2 days.")) {
+            const data = JSON.parse(localStorage.getItem(`data_${currentUser}`));
+            data[i].doneDate = new Date().getTime();
+            localStorage.setItem(`data_${currentUser}`, JSON.stringify(data));
+            loadItems();
+        }
+    }
+
+    function deleteItem(i, diff) {
+        if (diff > 0) {
+            alert(`You must wait ${diff} more days to delete.`);
+        } else {
+            const data = JSON.parse(localStorage.getItem(`data_${currentUser}`));
+            data.splice(i, 1);
+            localStorage.setItem(`data_${currentUser}`, JSON.stringify(data));
+            loadItems();
+        }
+    }
+</script>
+</body>
+</html>
